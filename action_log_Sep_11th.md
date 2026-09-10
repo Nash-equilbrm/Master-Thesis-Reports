@@ -237,6 +237,19 @@ generation 2 leaving matches generation 2 current.
 
 ---
 
+## Committed
+
+- `streaming-server` `44988e0` — `[fix]: prevent camera slot drift and
+  double-assignment on reconnect` (the generation-counter version above, not
+  the intermediate `sid`-guard)
+- `Master Thesis Client` `29c2731` — `[feat]: send deviceId in /register for
+  camera slot-drift fix` (`RegistrationClient.cs` only — the repo had several
+  unrelated Unity-generated project-file diffs sitting in the working tree,
+  left uncommitted/untouched)
+- Both local only, not pushed to origin as of this report.
+
+---
+
 ## Next steps
 
 1. Multi-camera test (2+ camera clients simultaneously) — not yet run.
