@@ -171,6 +171,51 @@ A separate scene guide describing how to use both scenes step by step is at
 - [ ] Set accurate `depthMin` / `depthMax` on `SceneCalibratorManager` once
   depth scale is measured against known distances
 
+### TODO — stereo depth via OpenCV for Unity
+
+OpenCV for Unity already has everything needed to compute metric depth from
+the two camera feeds without Python or Depth Anything V2:
+
+**Pipeline:**
+1. `Calib3d.stereoRectify()` — compute rectification transforms from the
+   calibration data (`SceneCalibrationData`) to align both camera images onto
+   a common epipolar plane
+2. `Calib3d.initUndistortRectifyMap()` → `Imgproc.remap()` — apply
+   rectification maps to both color frames each tick
+3. `StereoBM` or `StereoSGBM` — run stereo matching on the rectified pair to
+   produce a disparity map
+4. Convert disparity → metric depth per pixel:
+   `depth = (fx × baseline) / disparity`
+   where `baseline = |cam1.tvec − cam2.tvec|` (in metres, from calibration)
+
+**Script to write:** `StereoDepthBuilder.cs` in `Assets/Scripts/DIBR/`
+- Takes two `RenderTexture` inputs (cam1 color, cam2 color) + `SceneCalibrationData`
+- Outputs a depth `RenderTexture` per camera (replaces the `depthClipPath`
+  video input in `VideoFileSource`)
+- Wires into `DIBRSceneManager` as an alternative depth source
+
+**Why this is better than Depth Anything V2 for the offline PoC:**
+
+| | Stereo (OpenCV for Unity) | Depth Anything V2 |
+|---|---|---|
+| Runs in Unity | Yes | No — Python process |
+| Metric depth | Yes — directly from calibration | No — manual scale calibration |
+| Real-time | Yes (~10–30 fps, CPU SGBM) | Yes on GPU with ViT-S |
+| Textureless surfaces | Poor | Good (learned priors) |
+| Occluded regions | No depth | Estimated |
+| Needs camera overlap | Yes | No |
+
+Eliminates the `depthMin`/`depthMax` manual calibration step and removes
+Python from the offline PoC entirely. Worth doing first; fall back to Depth
+Anything V2 if stereo quality is insufficient (textureless scene, poor overlap).
+
+**Prerequisite:** cameras must have significant horizontal overlap, and
+calibration must be accurate (RPE < 1.0 px). Stereo matching fails silently
+on poorly calibrated pairs — a visual check of the rectified images (horizontal
+epipolar lines should align) is needed before trusting the depth output.
+
+---
+
 ### What changed vs. the morning's plan
 
 - Calibration toolchain: OpenCV for Unity (in-app) replaces Python +
