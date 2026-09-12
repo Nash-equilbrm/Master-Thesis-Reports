@@ -202,3 +202,58 @@ room joins, no publish yet → tutorial runs against a real/printed board →
 upload (will fail until the server endpoint exists; use the bypass above to
 get past it) → publish proceeds. Not run yet this session (needs the physical
 board + a camera device).
+
+---
+
+## Later same day: server endpoints implemented + smoke-tested (`streaming-server`)
+
+Implemented all three endpoints spec'd above in `registration-service/server.js`:
+
+- `GET /calibration-config` — returns a `CALIBRATION_CONFIG` object sourced
+  from env vars (`CALIBRATION_DICTIONARY_ID`, `CALIBRATION_SQUARES_X`,
+  `CALIBRATION_SQUARES_Y`, `CALIBRATION_SQUARE_LENGTH_MM`,
+  `CALIBRATION_MARKER_LENGTH_MM`), defaulting to the exact numbers in the spec.
+- `POST /calibration-data` — validates `identity`/`intrinsics`/`extrinsics`
+  are present (400 if not), stores in a new in-memory `calibrationData` map
+  keyed by identity, overwriting any previous entry (204 on success) — same
+  in-memory-map pattern already used for `slots`/`deviceSlots`, kept
+  consistent rather than adding persistence.
+- `GET /calibration-data/pair?cam1=&cam2=` — 404 if either identity has no
+  stored calibration yet, otherwise `{ cam1: {...}, cam2: {...} }`.
+
+Field names verified directly against the actual client code
+(`CameraCalibrationData.cs`, `CalibrationConfigClient.cs`,
+`CalibrationUploadClient.cs`) — `dictionaryId`/`squaresX`/`squaresY`/
+`squareLengthMm`/`markerLengthMm` and `identity`/`cameraName`/`intrinsics`/
+`extrinsics` all match exactly, no drift from the spec.
+
+**Smoke-tested locally** (`docker compose up -d --build` + `curl`):
+1. `GET /calibration-config` → correct JSON
+2. `GET /calibration-data/pair` before any upload → `404`
+3. `POST /calibration-data` for `cam1` → `204`
+4. `GET /calibration-data/pair` with only `cam1` uploaded → still `404`
+5. `POST /calibration-data` for `cam2` → `204`
+6. `GET /calibration-data/pair` with both uploaded → `200` with correct
+   paired payload
+7. `POST /calibration-data` with missing fields → `400`
+8. Regression check: existing `POST /register` still returns
+   `identity`/`token`/`livekit_url` correctly
+
+All eight checks passed. Stack torn down (`docker compose down`) after
+testing — not left running.
+
+**Also discovered while testing:** local `livekit.yaml`/`.env` still had a
+stale LAN IP (`192.168.2.71`) from a previous network — current machine's
+Wi-Fi IP is `10.0.7.148`. Confirms the `CLAUDE.md` warning that
+`configure.bat` must be re-run after any network change; this needs to
+happen before a real camera-device end-to-end test can run on this machine.
+
+**Not yet done:** the actual end-to-end device test (fresh camera connect →
+live tutorial against a real board → upload → publish) is still pending —
+needs `configure.bat` re-run for the current network, a physical ChArUco
+board, and a camera device on the same Wi-Fi. Endpoints are now ready for it;
+the `DevSkipCalibrationUpload` bypass should no longer be needed once this
+runs since the real server endpoint now exists and works.
+
+**Files changed:** `registration-service/server.js` only (no other files this
+pass). Not yet committed as of this report.
